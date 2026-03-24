@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Factory — The Board Game</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Playfair+Display:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #0f0e0c;
+    --paper: #f5f0e8;
+    --cream: #ede8dc;
+    --ruled: #d8d2c4;
+    --accent: #c84b2f;
+    --accent2: #2a5c8a;
+    --gold: #b8902a;
+    --green: #2d6e4e;
+    --amber: #d4760a;
+    --panel: #1a1814;
+    --panel2: #242019;
+    --mono: 'DM Mono', monospace;
+    --serif: 'Playfair Display', serif;
+    --sans: 'DM Sans', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  
+  body {
+    background: var(--panel);
+    color: var(--paper);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── LOADING ── */
+  #loading {
+    position: fixed; inset: 0;
+    background: var(--panel);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    z-index: 100;
+    transition: opacity 0.6s;
+  }
+  #loading .logo { font-family: var(--serif); font-size: 28px; color: var(--paper); margin-bottom: 8px; }
+  #loading .sub { font-family: var(--mono); font-size: 11px; color: var(--ruled); letter-spacing: .12em; }
+  #loading .bar { width: 200px; height: 2px; background: var(--panel2); margin-top: 24px; border-radius: 1px; overflow: hidden; }
+  #loading .bar-fill { height: 100%; background: var(--accent); width: 0; animation: load 1.5s ease forwards; }
+  @keyframes load { to { width: 100%; } }
+
+  /* ── LAYOUT ── */
+  #app { display: none; flex-direction: column; min-height: 100vh; }
+  #app.ready { display: flex; }
+
+  .header {
+    background: var(--panel2);
+    border-bottom: 1px solid rgba(255,255,255,.06);
+    padding: 14px 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; z-index: 10;
+  }
+  .header-title { font-family: var(--serif); font-size: 18px; color: var(--paper); }
+  .header-sub { font-family: var(--mono); font-size: 10px; color: var(--ruled); letter-spacing: .1em; margin-top: 1px; }
+
+  .quarter-pip { display: flex; gap: 6px; align-items: center; }
+  .pip { width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,.15);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-size: 10px; color: var(--ruled); }
+  .pip.done { background: var(--green); border-color: var(--green); color: #fff; }
+  .pip.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 500; }
+
+  /* ── SCOREBOARD ── */
+  .scoreboard {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 1px; background: rgba(255,255,255,.05);
+    border-top: 1px solid rgba(255,255,255,.06);
+    border-bottom: 1px solid rgba(255,255,255,.06);
+  }
+  .score-cell {
+    background: var(--panel); padding: 12px 16px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .score-label { font-family: var(--mono); font-size: 9px; color: var(--ruled); letter-spacing: .12em; text-transform: uppercase; }
+  .score-value { font-family: var(--mono); font-size: 22px; font-weight: 500; }
+  .score-bar { height: 3px; background: rgba(255,255,255,.08); border-radius: 2px; margin-top: 4px; }
+  .score-fill { height: 100%; border-radius: 2px; transition: width 0.8s cubic-bezier(.4,0,.2,1); }
+  .c-speed { color: var(--accent2); } .f-speed { background: var(--accent2); }
+  .c-data  { color: var(--gold);   } .f-data  { background: var(--gold); }
+  .c-gov   { color: var(--green);  } .f-gov   { background: var(--green); }
+  .c-team  { color: var(--amber);  } .f-team  { background: var(--amber); }
+
+  /* ── MAIN ── */
+  .main { display: flex; flex: 1; }
+
+  .left-panel {
+    width: 320px; flex-shrink: 0;
+    background: var(--panel2);
+    border-right: 1px solid rgba(255,255,255,.06);
+    display: flex; flex-direction: column;
+  }
+
+  .era-badge {
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(255,255,255,.06);
+  }
+  .era-eyebrow { font-family: var(--mono); font-size: 9px; letter-spacing: .14em; color: var(--ruled); margin-bottom: 4px; }
+  .era-name { font-family: var(--serif); font-size: 17px; color: var(--paper); }
+  .era-desc { font-size: 12px; color: var(--ruled); line-height: 1.6; margin-top: 6px; }
+
+  .cba-bench {
+    padding: 14px 20px;
+    border-bottom: 1px solid rgba(255,255,255,.06);
+  }
+  .bench-title { font-family: var(--mono); font-size: 9px; letter-spacing: .14em; color: var(--accent); margin-bottom: 8px; }
+  .bench-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .bench-key { font-size: 12px; color: var(--ruled); }
+  .bench-val { font-family: var(--mono); font-size: 12px; color: var(--paper); }
+
+  .log-panel {
+    flex: 1; overflow-y: auto; padding: 14px 20px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .log-title { font-family: var(--mono); font-size: 9px; letter-spacing: .14em; color: var(--ruled); margin-bottom: 4px; }
+  .log-entry {
+    padding: 8px 10px;
+    background: rgba(255,255,255,.03);
+    border-left: 2px solid;
+    border-radius: 0 4px 4px 0;
+    font-size: 11px; line-height: 1.6; color: var(--paper);
+  }
+  .log-entry.good { border-color: var(--green); }
+  .log-entry.bad { border-color: var(--accent); }
+  .log-entry.neutral { border-color: var(--ruled); }
+  .log-q { font-family: var(--mono); font-size: 9px; color: var(--ruled); margin-bottom: 2px; letter-spacing: .06em; }
+
+  /* ── DECISION AREA ── */
+  .right-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+  .decision-area { flex: 1; overflow-y: auto; padding: 24px; }
+
+  .q-header { margin-bottom: 20px; }
+  .q-eyebrow { font-family: var(--mono); font-size: 10px; letter-spacing: .12em; color: var(--accent); margin-bottom: 6px; }
+  .q-title { font-family: var(--serif); font-size: 22px; color: var(--paper); line-height: 1.3; margin-bottom: 8px; }
+  .q-context { font-size: 13px; color: var(--ruled); line-height: 1.7; max-width: 560px; }
+
+  .decisions-grid { display: flex; flex-direction: column; gap: 10px; margin-top: 22px; }
+  
+  .decision-card {
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 8px;
+    padding: 16px 18px;
+    cursor: pointer;
+    transition: all .18s;
+    position: relative;
+    overflow: hidden;
+  }
+  .decision-card::before {
+    content: '';
+    position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: transparent;
+    transition: background .18s;
+  }
+  .decision-card:hover { border-color: rgba(255,255,255,.2); background: rgba(255,255,255,.07); }
+  .decision-card:hover::before { background: var(--accent); }
+  .decision-card.selected { border-color: var(--accent); background: rgba(200,75,47,.08); }
+  .decision-card.selected::before { background: var(--accent); }
+  .decision-card.disabled { opacity: .35; cursor: default; pointer-events: none; }
+  .decision-card.correct-ref { border-color: rgba(45,110,78,.5); background: rgba(45,110,78,.06); }
+  .decision-card.correct-ref::before { background: var(--green); }
+
+  .dc-letter {
+    position: absolute; right: 16px; top: 16px;
+    font-family: var(--mono); font-size: 11px; color: var(--ruled);
+  }
+  .dc-title { font-size: 14px; font-weight: 500; color: var(--paper); margin-bottom: 4px; }
+  .dc-desc { font-size: 12px; color: var(--ruled); line-height: 1.6; max-width: 460px; }
+  .dc-impact { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .impact-tag {
+    font-family: var(--mono); font-size: 9px; padding: 2px 7px;
+    border-radius: 3px; letter-spacing: .06em;
+  }
+  .impact-tag.pos { background: rgba(45,110,78,.2); color: #5fba8a; }
+  .impact-tag.neg { background: rgba(200,75,47,.2); color: #e87c64; }
+  .impact-tag.neu { background: rgba(255,255,255,.08); color: var(--ruled); }
+
+  /* ── NARRATIVE / AI RESPONSE ── */
+  .narrative-panel {
+    border-top: 1px solid rgba(255,255,255,.06);
+    background: var(--panel2);
+    padding: 20px 24px;
+    max-height: 260px;
+    overflow-y: auto;
+  }
+  .narrative-eyebrow { font-family: var(--mono); font-size: 9px; letter-spacing: .12em; color: var(--accent); margin-bottom: 10px; }
+  .narrative-text { font-size: 13px; line-height: 1.8; color: var(--paper); max-width: 620px; }
+  .narrative-text p { margin-bottom: 10px; }
+  .narrative-text p:last-child { margin-bottom: 0; }
+  .narrative-cursor { display: inline-block; width: 7px; height: 14px; background: var(--accent); vertical-align: middle; animation: blink 0.9s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+  .next-btn {
+    display: block; margin-top: 14px;
+    padding: 9px 20px; font-family: var(--mono); font-size: 11px;
+    letter-spacing: .08em; cursor: pointer;
+    background: var(--accent); border: none; border-radius: 4px;
+    color: #fff; transition: opacity .15s;
+  }
+  .next-btn:hover { opacity: .85; }
+  .next-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+  /* ── DEBRIEF ── */
+  #debrief { display: none; }
+  #debrief.show { display: block; }
+  .debrief-wrap { padding: 32px 24px; max-width: 760px; margin: 0 auto; }
+  .debrief-title { font-family: var(--serif); font-size: 30px; margin-bottom: 6px; }
+  .debrief-sub { font-family: var(--mono); font-size: 11px; color: var(--ruled); letter-spacing: .1em; margin-bottom: 28px; }
+  .final-scores { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-bottom: 28px; }
+  .fs-card {
+    background: var(--panel2); border-radius: 8px; padding: 16px 20px;
+    border: 1px solid rgba(255,255,255,.08);
+  }
+  .fs-dim { font-family: var(--mono); font-size: 9px; letter-spacing: .12em; color: var(--ruled); margin-bottom: 6px; }
+  .fs-row { display: flex; justify-content: space-between; align-items: baseline; }
+  .fs-you { font-family: var(--mono); font-size: 28px; font-weight: 500; }
+  .fs-cba { font-family: var(--mono); font-size: 13px; color: var(--ruled); }
+  .fs-bar-wrap { margin-top: 8px; height: 6px; background: rgba(255,255,255,.08); border-radius: 3px; overflow: hidden; position: relative; }
+  .fs-bar-you { height: 100%; border-radius: 3px; transition: width 1s .5s cubic-bezier(.4,0,.2,1); }
+  .fs-bar-cba { position: absolute; top: 0; width: 3px; height: 100%; background: rgba(255,255,255,.35); }
+
+  .verdict-box {
+    background: var(--panel2); border-radius: 8px; padding: 20px;
+    border-left: 3px solid var(--accent); margin-bottom: 20px;
+  }
+  .verdict-title { font-family: var(--serif); font-size: 16px; margin-bottom: 8px; }
+  .verdict-text { font-size: 13px; color: var(--ruled); line-height: 1.8; }
+
+  .replay-btn {
+    padding: 11px 28px; font-family: var(--mono); font-size: 11px;
+    letter-spacing: .1em; cursor: pointer;
+    background: transparent; border: 1px solid rgba(255,255,255,.25);
+    border-radius: 4px; color: var(--paper); transition: all .15s;
+  }
+  .replay-btn:hover { background: rgba(255,255,255,.06); }
+
+  /* ── LOADING OVERLAY for AI ── */
+  .ai-thinking {
+    padding: 10px 0;
+    font-family: var(--mono); font-size: 11px; color: var(--ruled);
+    letter-spacing: .06em;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .dots span { animation: dot 1.4s infinite; display: inline-block; }
+  .dots span:nth-child(2) { animation-delay: .2s; }
+  .dots span:nth-child(3) { animation-delay: .4s; }
+  @keyframes dot { 0%,60%,100%{opacity:.2} 30%{opacity:1} }
+
+  @media (max-width: 700px) {
+    .left-panel { display: none; }
+    .scoreboard { grid-template-columns: repeat(2, 1fr); }
+    .final-scores { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="logo">AI Factory</div>
+  <div class="sub">GLC 2026 — Executive Simulation</div>
+  <div class="bar"><div class="bar-fill"></div></div>
+</div>
+
+<div id="app">
+  <div class="header">
+    <div>
+      <div class="header-title">AI Factory</div>
+      <div class="header-sub">Commonwealth Bank Benchmark Simulation</div>
+    </div>
+    <div class="quarter-pip" id="pips"></div>
+  </div>
+
+  <div class="scoreboard">
+    <div class="score-cell">
+      <span class="score-label">Speed to Value</span>
+      <span class="score-value c-speed" id="s-speed">0</span>
+      <div class="score-bar"><div class="score-fill f-speed" id="b-speed" style="width:0%"></div></div>
+    </div>
+    <div class="score-cell">
+      <span class="score-label">Data Quality</span>
+      <span class="score-value c-data" id="s-data">0</span>
+      <div class="score-bar"><div class="score-fill f-data" id="b-data" style="width:0%"></div></div>
+    </div>
+    <div class="score-cell">
+      <span class="score-label">Governance</span>
+      <span class="score-value c-gov" id="s-gov">0</span>
+      <div class="score-bar"><div class="score-fill f-gov" id="b-gov" style="width:0%"></div></div>
+    </div>
+    <div class="score-cell">
+      <span class="score-label">Team Capability</span>
+      <span class="score-value c-team" id="s-team">0</span>
+      <div class="score-bar"><div class="score-fill f-team" id="b-team" style="width:0%"></div></div>
+    </div>
+  </div>
+
+  <!-- Game area -->
+  <div id="game-area" class="main">
+    <div class="left-panel">
+      <div class="era-badge" id="era-badge">
+        <div class="era-eyebrow">CURRENT ERA</div>
+        <div class="era-name" id="era-name">Digital Foundations</div>
+        <div class="era-desc" id="era-desc">CBA 2015–2018: Starting with a vision but no data infrastructure.</div>
+      </div>
+      <div class="cba-bench">
+        <div class="bench-title">◆ CBA BENCHMARK</div>
+        <div class="bench-item"><span class="bench-key">Models in production</span><span class="bench-val" id="cba-models">—</span></div>
+        <div class="bench-item"><span class="bench-key">Deployment time</span><span class="bench-val" id="cba-deploy">—</span></div>
+        <div class="bench-item"><span class="bench-key">Daily AI decisions</span><span class="bench-val" id="cba-decisions">—</span></div>
+        <div class="bench-item"><span class="bench-key">CBA stage</span><span class="bench-val" id="cba-stage">Era One</span></div>
+      </div>
+      <div class="log-panel">
+        <div class="log-title">DECISION LOG</div>
+        <div id="log-entries"></div>
+      </div>
+    </div>
+
+    <div class="right-panel">
+      <div class="decision-area" id="decision-area">
+        <!-- filled by JS -->
+      </div>
+      <div class="narrative-panel" id="narrative-panel" style="display:none">
+        <div class="narrative-eyebrow">AI NARRATOR — CONSEQUENCE ANALYSIS</div>
+        <div class="narrative-text" id="narrative-text"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Debrief -->
+  <div id="debrief">
+    <div class="debrief-wrap">
+      <div class="debrief-title" id="debrief-title">Final Report</div>
+      <div class="debrief-sub">YOUR FOUR-QUARTER AI FACTORY BUILD vs CBA BENCHMARK</div>
+      <div class="final-scores" id="final-scores"></div>
+      <div class="verdict-box" id="verdict-box"></div>
+      <div id="debrief-narrative" class="narrative-text" style="margin-bottom:24px;font-size:13px;color:var(--ruled);line-height:1.8;"></div>
+      <button class="replay-btn" onclick="location.reload()">↺ Play again</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── GAME DATA ───────────────────────────────────────────────────────────────
+
+const CBA_BENCHMARK = { speed: 85, data: 90, gov: 80, team: 75 };
+
+const QUARTERS = [
+  {
+    id: 1,
+    era: "Digital Foundations",
+    eraDesc: "CBA 2015–2018: Starting with a vision but no data infrastructure. The CEE (Customer Engagement Engine) is the north star.",
+    cba: { models: "~12", deploy: "18 months", decisions: "< 1M / day", stage: "Era One" },
+    eyebrow: "QUARTER 1 — YEAR 1",
+    title: "Your data is trapped in silos.",
+    context: "You have a clear vision: use AI to personalise customer interactions. But your mortgage system, CRM, and transaction platform don't talk to each other. Before you can build a single model, you must decide where to start.",
+    decisions: [
+      {
+        id: "q1a",
+        title: "Modernise core banking infrastructure first",
+        desc: "Embark on a full core banking modernisation (like CBA's SAP implementation). Expensive, slow — 18+ months — but creates real-time data flow across all systems.",
+        impacts: [{ dim: "data", val: 20, label: "+DATA" }, { dim: "speed", val: -8, label: "-SPEED" }],
+        tags: [{ label: "+20 Data Quality", cls: "pos" }, { label: "-8 Speed", cls: "neg" }, { label: "CBA's actual choice", cls: "neu" }],
+        isCBA: true,
+        log: "Core banking overhaul: slow start, strong foundation."
+      },
+      {
+        id: "q1b",
+        title: "Build lightweight data connectors — move faster",
+        desc: "Skip the overhaul. Use ETL pipelines and APIs to stitch data together incrementally. Faster to launch but prone to drift and inconsistency over time.",
+        impacts: [{ dim: "speed", val: 12, label: "+SPEED" }, { dim: "data", val: -5, label: "-DATA" }],
+        tags: [{ label: "+12 Speed", cls: "pos" }, { label: "-5 Data Quality", cls: "neg" }],
+        isCBA: false,
+        log: "Fast connectors: gains time, risks data debt."
+      },
+      {
+        id: "q1c",
+        title: "Hire a Chief Data Officer and build governance first",
+        desc: "Before any infrastructure work, establish data ownership, policies, and a governance council. Reduces technical debt but delays the first model by a full year.",
+        impacts: [{ dim: "gov", val: 18, label: "+GOV" }, { dim: "speed", val: -12, label: "-SPEED" }],
+        tags: [{ label: "+18 Governance", cls: "pos" }, { label: "-12 Speed", cls: "neg" }],
+        isCBA: false,
+        log: "CDO hire: governance headstart, slower delivery."
+      }
+    ]
+  },
+  {
+    id: 2,
+    era: "Model Capability",
+    eraDesc: "CBA 2018–2019: Data flows. Now CBA builds its first supervised learning models and launches Ceba — a chatbot for 60,000 customer question variants.",
+    cba: { models: "~50", deploy: "9 months", decisions: "5M / day", stage: "Era One → Two" },
+    eyebrow: "QUARTER 2 — YEAR 2",
+    title: "Your first models are ready to deploy.",
+    context: "You've assembled some data capability. Your team has built a few promising models. Now you face the classic build-vs-buy question and must decide how to scale.",
+    decisions: [
+      {
+        id: "q2a",
+        title: "Start in a single channel, prove it, then expand",
+        desc: "CBA launched the CEE in a single branch, then call centers, then the app. Methodical rollout. Slower headline numbers but the system learns and adapts before scaling.",
+        impacts: [{ dim: "gov", val: 12, label: "+GOV" }, { dim: "speed", val: -5, label: "-SPEED" }, { dim: "team", val: 10, label: "+TEAM" }],
+        tags: [{ label: "+12 Gov", cls: "pos" }, { label: "+10 Team", cls: "pos" }, { label: "-5 Speed", cls: "neg" }, { label: "CBA's actual choice", cls: "neu" }],
+        isCBA: true,
+        log: "Single-channel launch: disciplined and scalable."
+      },
+      {
+        id: "q2b",
+        title: "Buy an AI vendor platform — deploy company-wide in 90 days",
+        desc: "A vendor promises a pre-built AI stack. You go live fast. But the platform is a black box with limited customisation, and staff resist adopting outputs they don't understand.",
+        impacts: [{ dim: "speed", val: 15, label: "+SPEED" }, { dim: "gov", val: -12, label: "-GOV" }, { dim: "team", val: -8, label: "-TEAM" }],
+        tags: [{ label: "+15 Speed", cls: "pos" }, { label: "-12 Gov", cls: "neg" }, { label: "-8 Team", cls: "neg" }],
+        isCBA: false,
+        log: "Vendor platform: fast launch, poor adoption."
+      },
+      {
+        id: "q2c",
+        title: "Embed Kaggle Grandmasters via ecosystem partnerships",
+        desc: "CBA partnered with H2O.ai to embed top AI talent they couldn't hire directly. Builds internal capability faster than hiring alone, but requires trust and IP management.",
+        impacts: [{ dim: "team", val: 20, label: "+TEAM" }, { dim: "data", val: 8, label: "+DATA" }],
+        tags: [{ label: "+20 Team", cls: "pos" }, { label: "+8 Data", cls: "pos" }, { label: "CBA's Era Two move", cls: "neu" }],
+        isCBA: false,
+        log: "Ecosystem talent: strong capability build."
+      }
+    ]
+  },
+  {
+    id: 3,
+    era: "Scaling & Loops",
+    eraDesc: "CBA 2019–2022: Benefits Finder, fraud detection at scale, 2,000+ models. CBA moves from supervised to loop learning — models that improve from their own outcomes.",
+    cba: { models: "2,000+", deploy: "6 weeks", decisions: "20M / day", stage: "Era Two → Three" },
+    eyebrow: "QUARTER 3 — YEAR 3",
+    title: "A governance failure hits the press.",
+    context: "One of your production models made systematically biased recommendations to a segment of customers. Regulators are asking questions. Your board wants a response. How you handle this defines your governance maturity.",
+    decisions: [
+      {
+        id: "q3a",
+        title: "Halt the affected model, run a full audit, publish findings",
+        desc: "Suspend the model immediately. Conduct an independent audit of all models in production. Publish a transparency report. Takes 2 months but dramatically improves trust and framework.",
+        impacts: [{ dim: "gov", val: 22, label: "+GOV" }, { dim: "speed", val: -15, label: "-SPEED" }, { dim: "data", val: 8, label: "+DATA" }],
+        tags: [{ label: "+22 Gov", cls: "pos" }, { label: "+8 Data", cls: "pos" }, { label: "-15 Speed", cls: "neg" }, { label: "Best practice", cls: "neu" }],
+        isCBA: true,
+        log: "Full audit published: costly but builds durable trust."
+      },
+      {
+        id: "q3b",
+        title: "Patch the model quietly, increase testing protocols internally",
+        desc: "Fix the specific bias, tighten QA, but don't publicise. Faster. But if discovered later, regulatory and reputational damage is catastrophic.",
+        impacts: [{ dim: "gov", val: -20, label: "-GOV" }, { dim: "speed", val: 5, label: "+SPEED" }],
+        tags: [{ label: "-20 Gov", cls: "neg" }, { label: "+5 Speed", cls: "pos" }, { label: "High risk", cls: "neg" }],
+        isCBA: false,
+        log: "Silent patch: governance time-bomb set."
+      },
+      {
+        id: "q3c",
+        title: "Bring in an external AI ethics board and new governance council",
+        desc: "Create a standing AI Ethics Board with external experts and a formal model risk council. Adds process overhead but creates a durable system for all future model decisions.",
+        impacts: [{ dim: "gov", val: 18, label: "+GOV" }, { dim: "team", val: 10, label: "+TEAM" }, { dim: "speed", val: -8, label: "-SPEED" }],
+        tags: [{ label: "+18 Gov", cls: "pos" }, { label: "+10 Team", cls: "pos" }, { label: "-8 Speed", cls: "neg" }],
+        isCBA: false,
+        log: "Ethics board: systemic governance improvement."
+      }
+    ]
+  },
+  {
+    id: 4,
+    era: "True AI Factory",
+    eraDesc: "CBA 2022–present: 55M AI decisions per day, 2,000+ models, idea-to-deploy in 6 weeks. The factory is running. But are you ready for agentic AI?",
+    cba: { models: "2,000+", deploy: "6 weeks", decisions: "55M / day", stage: "Era Three" },
+    eyebrow: "QUARTER 4 — YEAR 4",
+    title: "Agentic AI is ready. Where do you point it?",
+    context: "Your AI Factory is running at scale. A new generation of agentic AI — systems that can plan, act, and learn autonomously — is available. You must decide how to deploy it and what human oversight looks like.",
+    decisions: [
+      {
+        id: "q4a",
+        title: "Deploy agents in recommendation mode — humans approve all actions",
+        desc: "Agents surface recommendations; humans execute. Lower value captured, but high trust. Suitable for high-stakes, low-volume decisions where errors are catastrophic.",
+        impacts: [{ dim: "gov", val: 15, label: "+GOV" }, { dim: "team", val: 8, label: "+TEAM" }],
+        tags: [{ label: "+15 Gov", cls: "pos" }, { label: "+8 Team", cls: "pos" }, { label: "Conservative", cls: "neu" }],
+        isCBA: false,
+        log: "Recommendation mode: safe but value-capped."
+      },
+      {
+        id: "q4b",
+        title: "Autonomous agents for routine decisions, humans for complex cases",
+        desc: "Agents act autonomously on high-volume, low-stakes decisions (fraud flags, routine queries). Humans handle edge cases. This is CBA's fraud detection approach — 20M payments daily.",
+        impacts: [{ dim: "speed", val: 20, label: "+SPEED" }, { dim: "data", val: 10, label: "+DATA" }, { dim: "gov", val: -5, label: "-GOV" }],
+        tags: [{ label: "+20 Speed", cls: "pos" }, { label: "+10 Data", cls: "pos" }, { label: "-5 Gov", cls: "neg" }, { label: "CBA's approach", cls: "neu" }],
+        isCBA: true,
+        log: "Tiered autonomy: scalable and operationally mature."
+      },
+      {
+        id: "q4c",
+        title: "Full autonomy with monitoring dashboards only",
+        desc: "Agents decide and act. Humans watch dashboards and intervene only on alerts. Maximum velocity but significant risk if trust calibration is wrong.",
+        impacts: [{ dim: "speed", val: 25, label: "+SPEED" }, { dim: "gov", val: -25, label: "-GOV" }],
+        tags: [{ label: "+25 Speed", cls: "pos" }, { label: "-25 Gov", cls: "neg" }, { label: "High risk", cls: "neg" }],
+        isCBA: false,
+        log: "Full autonomy: governance severely compromised."
+      }
+    ]
+  }
+];
+
+// ─── STATE ───────────────────────────────────────────────────────────────────
+
+const state = {
+  scores: { speed: 10, data: 10, gov: 10, team: 10 },
+  currentQ: 0,
+  selectedDecision: null,
+  narrativeDone: false,
+  log: []
+};
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+
+function clamp(v) { return Math.max(0, Math.min(100, v)); }
+
+function updateScoreboard() {
+  const s = state.scores;
+  ['speed','data','gov','team'].forEach(k => {
+    document.getElementById('s-'+k).textContent = Math.round(s[k]);
+    document.getElementById('b-'+k).style.width = clamp(s[k])+'%';
+  });
+}
+
+function updatePips() {
+  const el = document.getElementById('pips');
+  el.innerHTML = '';
+  for (let i = 0; i < 4; i++) {
+    const p = document.createElement('div');
+    p.className = 'pip' + (i < state.currentQ ? ' done' : i === state.currentQ ? ' active' : '');
+    p.textContent = 'Q'+(i+1);
+    el.appendChild(p);
+  }
+}
+
+function addLog(text, type = 'neutral') {
+  const q = state.currentQ + 1;
+  state.log.push({ q, text, type });
+  const el = document.getElementById('log-entries');
+  const d = document.createElement('div');
+  d.className = 'log-entry ' + type;
+  d.innerHTML = `<div class="log-q">Q${q}</div>${text}`;
+  el.prepend(d);
+}
+
+// ─── RENDER QUARTER ───────────────────────────────────────────────────────────
+
+function renderQuarter() {
+  const q = QUARTERS[state.currentQ];
+  updatePips();
+
+  // era panel
+  document.getElementById('era-name').textContent = q.era;
+  document.getElementById('era-desc').textContent = q.eraDesc;
+  document.getElementById('cba-models').textContent = q.cba.models;
+  document.getElementById('cba-deploy').textContent = q.cba.deploy;
+  document.getElementById('cba-decisions').textContent = q.cba.decisions;
+  document.getElementById('cba-stage').textContent = q.cba.stage;
+
+  // decision area
+  const area = document.getElementById('decision-area');
+  area.innerHTML = `
+    <div class="q-header">
+      <div class="q-eyebrow">${q.eyebrow}</div>
+      <div class="q-title">${q.title}</div>
+      <div class="q-context">${q.context}</div>
+    </div>
+    <div class="decisions-grid">
+      ${q.decisions.map((d, i) => `
+        <div class="decision-card" id="dc-${d.id}" onclick="selectDecision('${d.id}')">
+          <div class="dc-letter">${String.fromCharCode(65+i)}</div>
+          <div class="dc-title">${d.title}</div>
+          <div class="dc-desc">${d.desc}</div>
+          <div class="dc-impact">
+            ${d.tags.map(t => `<span class="impact-tag ${t.cls}">${t.label}</span>`).join('')}
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+
+  document.getElementById('narrative-panel').style.display = 'none';
+  state.selectedDecision = null;
+  state.narrativeDone = false;
+}
+
+// ─── SELECT DECISION ──────────────────────────────────────────────────────────
+
+function selectDecision(id) {
+  if (state.selectedDecision) return; // locked after pick
+  state.selectedDecision = id;
+
+  const q = QUARTERS[state.currentQ];
+  const dec = q.decisions.find(d => d.id === id);
+
+  // highlight cards
+  q.decisions.forEach(d => {
+    const el = document.getElementById('dc-'+d.id);
+    if (d.id === id) el.classList.add('selected');
+    else el.classList.add('disabled');
+    if (d.isCBA && d.id !== id) el.classList.add('correct-ref');
+  });
+
+  // apply impacts
+  dec.impacts.forEach(imp => {
+    state.scores[imp.dim] = clamp(state.scores[imp.dim] + imp.val);
+  });
+  updateScoreboard();
+
+  // log type
+  const hasBigNeg = dec.impacts.some(i => i.val < -10);
+  const hasBigPos = dec.impacts.some(i => i.val > 15);
+  const type = hasBigNeg ? 'bad' : hasBigPos ? 'good' : 'neutral';
+  addLog(dec.log, type);
+
+  // show narrative
+  showNarrative(q, dec);
+}
+
+// ─── NARRATIVE (AI-powered) ────────────────────────────────────────────────────
+
+async function showNarrative(q, dec) {
+  const panel = document.getElementById('narrative-panel');
+  const textEl = document.getElementById('narrative-text');
+  panel.style.display = 'block';
+  textEl.innerHTML = `<div class="ai-thinking">ANALYSING DECISION <div class="dots"><span>.</span><span>.</span><span>.</span></div></div>`;
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  const cbaDiff = dec.isCBA
+    ? 'This mirrors what CBA actually did.'
+    : `CBA took a different path. ${q.decisions.find(d=>d.isCBA)?.title || ''}.`;
+
+  const scoreSnap = Object.entries(state.scores).map(([k,v]) => `${k}: ${Math.round(v)}`).join(', ');
+
+  const prompt = `You are the AI narrator in an executive education board game about building an AI Factory, based on the Commonwealth Bank of Australia (CBA) case study from the IMD GLC 2026 program.
+
+The learner just completed Quarter ${q.id} (Era: ${q.era}).
+Their decision: "${dec.title}"
+Description: "${dec.desc}"
+Score impact: ${dec.impacts.map(i=>`${i.dim} ${i.val>0?'+':''}${i.val}`).join(', ')}
+CBA comparison: ${cbaDiff}
+Current scores: ${scoreSnap}
+
+Write a consequence analysis in 3 short paragraphs (2-3 sentences each):
+1. Immediate consequence of their choice — what happens in their organisation this quarter
+2. How this compares to CBA's actual approach and why CBA's choice mattered (or didn't)
+3. A forward-looking tension or risk they now carry into next quarter
+
+Be specific, sharp, and educational. Use concrete language. Reference real CBA facts where relevant (CEE, Benefits Finder, Ceba, 2,000 models, 55M decisions/day, 6-week deployment). Do NOT use bullet points. Write in flowing prose. Keep total response under 200 words.`;
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    const data = await resp.json();
+    const raw = (data.content || []).map(b => b.type === 'text' ? b.text : '').join('');
+
+    // Stream text character by character
+    textEl.innerHTML = '<span class="narrative-cursor"></span>';
+    let i = 0;
+    const paragraphs = raw.split(/\n\n+/).filter(p => p.trim());
+    let html = '';
+    paragraphs.forEach(p => { html += `<p>${p.trim()}</p>`; });
+
+    function typeNext() {
+      if (i < html.length) {
+        textEl.innerHTML = html.slice(0, i) + '<span class="narrative-cursor"></span>';
+        i += 3;
+        requestAnimationFrame(() => setTimeout(typeNext, 12));
+      } else {
+        textEl.innerHTML = html + buildNextBtn();
+        state.narrativeDone = true;
+      }
+    }
+    typeNext();
+
+  } catch(e) {
+    // Fallback narrative
+    const fallback = buildFallback(q, dec, cbaDiff);
+    textEl.innerHTML = `<p>${fallback}</p>` + buildNextBtn();
+    state.narrativeDone = true;
+  }
+}
+
+function buildFallback(q, dec, cbaDiff) {
+  const lines = [
+    `Your choice to "${dec.title.toLowerCase()}" sets a trajectory for this quarter. `,
+    dec.isCBA
+      ? `This aligns with CBA's actual strategy — a deliberate, methodical approach that paid off over eight years. `
+      : `${cbaDiff} The divergence from CBA's path will have compounding effects. `,
+    `Watch how your scores evolve into the next quarter, and consider what trade-offs you've already locked in.`
+  ];
+  return lines.join('');
+}
+
+function buildNextBtn() {
+  const isLast = state.currentQ >= QUARTERS.length - 1;
+  const label = isLast ? 'VIEW FINAL REPORT →' : 'NEXT QUARTER →';
+  const fn = isLast ? 'showDebrief()' : 'nextQuarter()';
+  return `<button class="next-btn" onclick="${fn}">${label}</button>`;
+}
+
+// ─── NEXT QUARTER ──────────────────────────────────────────────────────────────
+
+function nextQuarter() {
+  state.currentQ++;
+  renderQuarter();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ─── DEBRIEF ──────────────────────────────────────────────────────────────────
+
+async function showDebrief() {
+  document.getElementById('game-area').style.display = 'none';
+  const db = document.getElementById('debrief');
+  db.classList.add('show');
+
+  const s = state.scores;
+  const total = Math.round((s.speed + s.data + s.gov + s.team) / 4);
+  const cbaTotal = Math.round((CBA_BENCHMARK.speed + CBA_BENCHMARK.data + CBA_BENCHMARK.gov + CBA_BENCHMARK.team) / 4);
+
+  // Verdict
+  let grade, title;
+  if (total >= 70) { grade = 'var(--green)'; title = 'Era Three — AI Factory Operational'; }
+  else if (total >= 50) { grade = 'var(--gold)'; title = 'Era Two — Scaling but Fragile'; }
+  else { grade = 'var(--accent)'; title = 'Era One — Digital Foundations Incomplete'; }
+
+  document.getElementById('debrief-title').textContent = title;
+
+  // Score cards
+  const dims = [
+    { key: 'speed', label: 'Speed to Value', cls: 'f-speed', color: 'var(--accent2)' },
+    { key: 'data',  label: 'Data Quality',   cls: 'f-data',  color: 'var(--gold)' },
+    { key: 'gov',   label: 'Governance',      cls: 'f-gov',   color: 'var(--green)' },
+    { key: 'team',  label: 'Team Capability', cls: 'f-team',  color: 'var(--amber)' }
+  ];
+
+  document.getElementById('final-scores').innerHTML = dims.map(d => {
+    const youVal = Math.round(s[d.key]);
+    const cbaVal = CBA_BENCHMARK[d.key];
+    return `
+    <div class="fs-card">
+      <div class="fs-dim">${d.label.toUpperCase()}</div>
+      <div class="fs-row">
+        <span class="fs-you" style="color:${d.color}">${youVal}</span>
+        <span class="fs-cba">CBA: ${cbaVal}</span>
+      </div>
+      <div class="fs-bar-wrap">
+        <div class="fs-bar-you ${d.cls}" style="width:0%;background:${d.color}" data-target="${youVal}"></div>
+        <div class="fs-bar-cba" style="left:${cbaVal}%"></div>
+      </div>
+    </div>`;
+  }).join('');
+
+  setTimeout(() => {
+    document.querySelectorAll('.fs-bar-you').forEach(el => {
+      el.style.width = el.dataset.target + '%';
+    });
+  }, 100);
+
+  // Verdict box
+  const gap = total - cbaTotal;
+  const gapText = gap >= 0 ? `+${gap} above` : `${Math.abs(gap)} below`;
+  document.getElementById('verdict-box').innerHTML = `
+    <div class="verdict-title" style="color:${grade}">Overall Score: ${total} / 100</div>
+    <div class="verdict-text">
+      You finished ${gapText} the CBA benchmark of ${cbaTotal}. 
+      ${gap >= 10 ? 'Your factory rivals CBA\'s operational maturity.' :
+        gap >= -10 ? 'You\'re in the same league as CBA\'s early Era Three.' :
+        'Significant gaps remain — your factory is operational but not yet at CBA scale.'}
+      Your decision log recorded ${state.log.length} choices across four quarters.
+    </div>`;
+
+  // AI debrief narrative
+  const decisionSummary = state.log.map((l,i) => `Q${l.q}: ${l.text}`).join('; ');
+  const debriefPrompt = `You are the faculty debrief narrator for an executive AI strategy course (IMD GLC 2026). 
+
+The learner has completed a 4-quarter AI Factory board game based on the Commonwealth Bank of Australia case study.
+
+Their decisions: ${decisionSummary}
+Final scores: Speed ${Math.round(s.speed)}, Data ${Math.round(s.data)}, Governance ${Math.round(s.gov)}, Team ${Math.round(s.team)}
+Overall average: ${total}/100 vs CBA benchmark of ${cbaTotal}/100
+
+Write a 3-paragraph debrief (3-4 sentences each) that:
+1. Identifies the strongest strategic move the learner made and why it matters in the CBA context
+2. Names the biggest vulnerability they've left in their factory — connect it to a real CBA challenge or lesson
+3. One forward-looking recommendation for their agentic AI era, drawing on the IMD framework of inputs/models/decisions/outcomes
+
+Be direct, specific, and educational. Reference CBA facts. No bullet points. Flowing prose. Under 220 words.`;
+
+  const debriefEl = document.getElementById('debrief-narrative');
+  debriefEl.innerHTML = `<div class="ai-thinking">GENERATING DEBRIEF <div class="dots"><span>.</span><span>.</span><span>.</span></div></div>`;
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: debriefPrompt }]
+      })
+    });
+    const data = await resp.json();
+    const raw = (data.content || []).map(b => b.type === 'text' ? b.text : '').join('');
+    const paras = raw.split(/\n\n+/).filter(p => p.trim());
+    debriefEl.innerHTML = paras.map(p => `<p style="margin-bottom:12px">${p.trim()}</p>`).join('');
+  } catch(e) {
+    debriefEl.innerHTML = `<p>Eight years of disciplined capability building made CBA the world's top-ranked AI bank. Your four quarters compressed that journey — the trade-offs you made are exactly the trade-offs real executives face. Review your decision log and consider: where did you optimise for speed at the cost of governance? That tension never disappears.</p>`;
+  }
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+
+setTimeout(() => {
+  document.getElementById('loading').style.opacity = '0';
+  setTimeout(() => {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('app').classList.add('ready');
+    updateScoreboard();
+    renderQuarter();
+  }, 600);
+}, 1800);
+</script>
+
+</body>
+</html>
